@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\InventoryUpdated;
 use App\Models\Equipment;
 use App\Models\BorrowRecord;
 use Illuminate\Http\Request;
@@ -14,10 +15,11 @@ class BorrowController extends Controller
         $user = $request->user();
 
         $labBreakdown = collect();
+
         if ($user->role === 'dean') {
             $query = BorrowRecord::with('equipment.laboratory');
             $availableEquipment = collect();
-            
+
             if ($request->filled('lab_id')) {
                 $query->whereHas('equipment', function ($q) use ($request) {
                     $q->where('laboratory_id', $request->lab_id);
@@ -35,6 +37,7 @@ class BorrowController extends Controller
                 ->whereHas('equipment', function ($q) use ($user) {
                     $q->where('laboratory_id', $user->laboratory_id);
                 });
+
             $availableEquipment = Equipment::where('laboratory_id', $user->laboratory_id)
                 ->where('status', 'working')
                 ->get();
@@ -48,14 +51,15 @@ class BorrowController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+
+            $query->where(function ($q) use ($search) {
                 $q->where('borrower_name', 'like', "%{$search}%")
-                  ->orWhere('borrower_id_number', 'like', "%{$search}%")
-                  ->orWhereHas('equipment', function ($eqQ) use ($search) {
-                      $eqQ->where('item_name', 'like', "%{$search}%")
-                          ->orWhere('par_number', 'like', "%{$search}%")
-                          ->orWhere('property_number', 'like', "%{$search}%");
-                  });
+                    ->orWhere('borrower_id_number', 'like', "%{$search}%")
+                    ->orWhereHas('equipment', function ($eqQ) use ($search) {
+                        $eqQ->where('item_name', 'like', "%{$search}%")
+                            ->orWhere('par_number', 'like', "%{$search}%")
+                            ->orWhere('property_number', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -81,7 +85,7 @@ class BorrowController extends Controller
         ]);
 
         $equipment = Equipment::findOrFail($validated['equipment_id']);
-        
+
         if ($equipment->laboratory_id !== $user->laboratory_id) {
             abort(403, 'Unauthorized action.');
         }
@@ -101,6 +105,8 @@ class BorrowController extends Controller
         ]);
 
         $equipment->update(['status' => 'borrowed']);
+
+        InventoryUpdated::dispatch();
 
         return redirect()->route('borrow.index')->with('success', 'Equipment borrowed successfully.');
     }
@@ -127,6 +133,8 @@ class BorrowController extends Controller
         ]);
 
         $record->equipment->update(['status' => $validated['condition']]);
+
+        InventoryUpdated::dispatch();
 
         return redirect()->route('borrow.index')->with('success', 'Equipment returned successfully.');
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Laboratory;
 use App\Models\Equipment;
+use App\Models\BorrowRecord;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -23,40 +24,121 @@ class DashboardController extends Controller
 
         if ($user->role === 'dean' && !$selectedLabId) {
             $totalEquipment = Equipment::where('status', '!=', 'disposed')->count();
-            $borrowedItems = \App\Models\BorrowRecord::where('status', 'borrowed')->count();
+
+            $borrowedItems = BorrowRecord::where('status', 'borrowed')->count();
+
             $damagedItems = Equipment::where('status', 'damaged')->count();
+
             $maintenanceItems = Equipment::where('status', 'under_repair')->count();
-            
-            $borrowActivity = \App\Models\BorrowRecord::with('equipment')->latest()->take(5)->get();
-            $labOverview = Laboratory::withCount(['equipments' => function ($query) {
-                $query->where('status', '!=', 'disposed');
-            }])->get();
-            $recentInventory = Equipment::with('laboratory')->latest()->take(5)->get();
+
+            $borrowActivity = BorrowRecord::with('equipment')
+                ->latest()
+                ->take(5)
+                ->get();
+
+            $labOverview = Laboratory::withCount([
+                'equipments' => function ($query) {
+                    $query->where('status', '!=', 'disposed');
+                }
+            ])->get();
+
+            $recentInventory = Equipment::with('laboratory')
+                ->latest()
+                ->take(5)
+                ->get();
         } else {
-            // Either Admin (with a laboratory) or Dean filtering by a specific lab
-            $totalEquipment = Equipment::where('laboratory_id', $selectedLabId)->where('status', '!=', 'disposed')->count();
-            $borrowedItems = \App\Models\BorrowRecord::whereHas('equipment', function($q) use ($selectedLabId) {
+            // Admin dashboard or dean dashboard filtered by laboratory
+            $totalEquipment = Equipment::where('laboratory_id', $selectedLabId)
+                ->where('status', '!=', 'disposed')
+                ->count();
+
+            $borrowedItems = BorrowRecord::whereHas('equipment', function ($q) use ($selectedLabId) {
                 $q->where('laboratory_id', $selectedLabId);
-            })->where('status', 'borrowed')->count();
-            $damagedItems = Equipment::where('laboratory_id', $selectedLabId)->where('status', 'damaged')->count();
-            $maintenanceItems = Equipment::where('laboratory_id', $selectedLabId)->where('status', 'under_repair')->count();
-            
-            $borrowActivity = \App\Models\BorrowRecord::whereHas('equipment', function($q) use ($selectedLabId) {
+            })
+                ->where('status', 'borrowed')
+                ->count();
+
+            $damagedItems = Equipment::where('laboratory_id', $selectedLabId)
+                ->where('status', 'damaged')
+                ->count();
+
+            $maintenanceItems = Equipment::where('laboratory_id', $selectedLabId)
+                ->where('status', 'under_repair')
+                ->count();
+
+            $borrowActivity = BorrowRecord::whereHas('equipment', function ($q) use ($selectedLabId) {
                 $q->where('laboratory_id', $selectedLabId);
-            })->with('equipment')->latest()->take(5)->get();
-            $labOverview = collect(); // Not needed when filtered
-            $recentInventory = Equipment::where('laboratory_id', $selectedLabId)->with('laboratory')->latest()->take(5)->get();
+            })
+                ->with('equipment')
+                ->latest()
+                ->take(5)
+                ->get();
+
+            $labOverview = collect();
+
+            $recentInventory = Equipment::where('laboratory_id', $selectedLabId)
+                ->with('laboratory')
+                ->latest()
+                ->take(5)
+                ->get();
         }
 
         return view('dashboard', compact(
-            'totalEquipment', 
-            'borrowedItems', 
-            'damagedItems', 
+            'totalEquipment',
+            'borrowedItems',
+            'damagedItems',
             'maintenanceItems',
             'borrowActivity',
             'labOverview',
             'recentInventory',
             'selectedLab'
         ));
+    }
+
+    public function stats(Request $request)
+    {
+        $user = $request->user();
+        $selectedLabId = null;
+
+        if ($user->role === 'admin' && $user->laboratory_id) {
+            $selectedLabId = $user->laboratory_id;
+        } elseif ($user->role === 'dean' && $request->has('lab_id')) {
+            $selectedLabId = $request->get('lab_id');
+        }
+
+        if ($user->role === 'dean' && !$selectedLabId) {
+            $totalEquipment = Equipment::where('status', '!=', 'disposed')->count();
+
+            $borrowedItems = BorrowRecord::where('status', 'borrowed')->count();
+
+            $damagedItems = Equipment::where('status', 'damaged')->count();
+
+            $maintenanceItems = Equipment::where('status', 'under_repair')->count();
+        } else {
+            $totalEquipment = Equipment::where('laboratory_id', $selectedLabId)
+                ->where('status', '!=', 'disposed')
+                ->count();
+
+            $borrowedItems = BorrowRecord::whereHas('equipment', function ($q) use ($selectedLabId) {
+                $q->where('laboratory_id', $selectedLabId);
+            })
+                ->where('status', 'borrowed')
+                ->count();
+
+            $damagedItems = Equipment::where('laboratory_id', $selectedLabId)
+                ->where('status', 'damaged')
+                ->count();
+
+            $maintenanceItems = Equipment::where('laboratory_id', $selectedLabId)
+                ->where('status', 'under_repair')
+                ->count();
+        }
+
+        return response()->json([
+            'totalEquipment' => $totalEquipment,
+            'borrowedItems' => $borrowedItems,
+            'damagedItems' => $damagedItems,
+            'maintenanceItems' => $maintenanceItems,
+        ]);
     }
 }

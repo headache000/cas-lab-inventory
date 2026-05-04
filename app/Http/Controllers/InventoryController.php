@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\InventoryUpdated;
 use App\Models\Equipment;
 use Illuminate\Http\Request;
 
@@ -10,9 +11,9 @@ class InventoryController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        
+
         $query = Equipment::with('laboratory');
-        
+
         // Ensure Admin only sees their lab's inventory
         if ($user->role === 'admin') {
             $query->where('laboratory_id', $user->laboratory_id);
@@ -22,20 +23,20 @@ class InventoryController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('item_name', 'like', "%{$search}%")
-                  ->orWhere('par_number', 'like', "%{$search}%")
-                  ->orWhere('property_number', 'like', "%{$search}%")
-                  ->orWhere('model', 'like', "%{$search}%");
+                    ->orWhere('par_number', 'like', "%{$search}%")
+                    ->orWhere('property_number', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%");
             });
         }
 
         if ($request->filled('category')) {
             $query->where('category', $request->category);
         }
-        
+
         $inventory = $query->latest()->get();
-        
+
         return view('inventory.index', compact('inventory'));
     }
 
@@ -66,12 +67,15 @@ class InventoryController extends Controller
 
         Equipment::create($validated);
 
+        InventoryUpdated::dispatch();
+
         return redirect()->route('inventory.index')->with('success', 'Equipment added successfully.');
     }
 
     public function export(Request $request)
     {
         $user = $request->user();
+
         if ($user->role !== 'admin' || !$user->laboratory_id) {
             abort(403, 'Unauthorized action.');
         }
@@ -80,11 +84,11 @@ class InventoryController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('item_name', 'like', "%{$search}%")
-                  ->orWhere('par_number', 'like', "%{$search}%")
-                  ->orWhere('property_number', 'like', "%{$search}%")
-                  ->orWhere('model', 'like', "%{$search}%");
+                    ->orWhere('par_number', 'like', "%{$search}%")
+                    ->orWhere('property_number', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%");
             });
         }
 
@@ -97,17 +101,29 @@ class InventoryController extends Controller
         $filename = "equipment_inventory_" . date('Y-m-d_H-i-s') . ".csv";
 
         $headers = [
-            "Content-type"        => "text/csv",
+            "Content-type" => "text/csv",
             "Content-Disposition" => "attachment; filename=$filename",
-            "Pragma"              => "no-cache",
-            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
-            "Expires"             => "0"
+            "Pragma" => "no-cache",
+            "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+            "Expires" => "0",
         ];
 
-        $columns = ['PAR Number', 'Property Number', 'Item Name', 'Category', 'Model', 'Status', 'Date Acquired', 'Amount', 'Fund Source', 'Description'];
+        $columns = [
+            'PAR Number',
+            'Property Number',
+            'Item Name',
+            'Category',
+            'Model',
+            'Status',
+            'Date Acquired',
+            'Amount',
+            'Fund Source',
+            'Description',
+        ];
 
-        $callback = function() use($inventory, $columns) {
+        $callback = function () use ($inventory, $columns) {
             $file = fopen('php://output', 'w');
+
             fputcsv($file, $columns);
 
             foreach ($inventory as $item) {
@@ -121,10 +137,12 @@ class InventoryController extends Controller
                     $item->acquired_date,
                     $item->amount,
                     $item->fund,
-                    $item->description
+                    $item->description,
                 ];
+
                 fputcsv($file, $row);
             }
+
             fclose($file);
         };
 
@@ -134,6 +152,7 @@ class InventoryController extends Controller
     public function update(Request $request, Equipment $equipment)
     {
         $user = $request->user();
+
         if ($user->role !== 'admin' || $equipment->laboratory_id !== $user->laboratory_id) {
             abort(403, 'Unauthorized action.');
         }
@@ -155,17 +174,22 @@ class InventoryController extends Controller
 
         $equipment->update($validated);
 
+        InventoryUpdated::dispatch();
+
         return redirect()->route('inventory.index')->with('success', 'Equipment updated successfully.');
     }
 
     public function destroy(Request $request, Equipment $equipment)
     {
         $user = $request->user();
+
         if ($user->role !== 'admin' || $equipment->laboratory_id !== $user->laboratory_id) {
             abort(403, 'Unauthorized action.');
         }
 
         $equipment->delete();
+
+        InventoryUpdated::dispatch();
 
         return redirect()->route('inventory.index')->with('success', 'Equipment deleted successfully.');
     }

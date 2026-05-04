@@ -1,30 +1,35 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\BorrowController;
+use App\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect()->route('login');
 });
 
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\InventoryController;
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
-Route::get('/inventory/export', [InventoryController::class, 'export'])->middleware(['auth', 'verified'])->name('inventory.export');
-Route::get('/inventory', [InventoryController::class, 'index'])->middleware(['auth', 'verified'])->name('inventory.index');
-Route::post('/inventory', [InventoryController::class, 'store'])->middleware(['auth', 'verified'])->name('inventory.store');
-Route::put('/inventory/{equipment}', [InventoryController::class, 'update'])->middleware(['auth', 'verified'])->name('inventory.update');
-Route::delete('/inventory/{equipment}', [InventoryController::class, 'destroy'])->middleware(['auth', 'verified'])->name('inventory.destroy');
+    // This route is for real-time dashboard updates
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
 
-use App\Http\Controllers\BorrowController;
-Route::get('/borrow', [BorrowController::class, 'index'])->middleware(['auth', 'verified'])->name('borrow.index');
-Route::post('/borrow', [BorrowController::class, 'store'])->middleware(['auth', 'verified'])->name('borrow.store');
-Route::patch('/borrow/{record}/return', [BorrowController::class, 'returnItem'])->middleware(['auth', 'verified'])->name('borrow.return');
+    Route::get('/inventory/export', [InventoryController::class, 'export'])->name('inventory.export');
+    Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
+    Route::post('/inventory', [InventoryController::class, 'store'])->name('inventory.store');
+    Route::put('/inventory/{equipment}', [InventoryController::class, 'update'])->name('inventory.update');
+    Route::delete('/inventory/{equipment}', [InventoryController::class, 'destroy'])->name('inventory.destroy');
 
-use App\Http\Controllers\ReportController;
-Route::get('/reports', [ReportController::class, 'index'])->middleware(['auth', 'verified'])->name('reports.index');
-Route::get('/reports/export', [ReportController::class, 'export'])->middleware(['auth', 'verified'])->name('reports.export');
+    Route::get('/borrow', [BorrowController::class, 'index'])->name('borrow.index');
+    Route::post('/borrow', [BorrowController::class, 'store'])->name('borrow.store');
+    Route::patch('/borrow/{record}/return', [BorrowController::class, 'returnItem'])->name('borrow.return');
+
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -32,4 +37,4 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';
